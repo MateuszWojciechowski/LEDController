@@ -94,17 +94,18 @@ public class MainActivity extends AppCompatActivity {
         connectionButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                display.connect();
                 if(display.isConnected()) {
-                    connectionButton.setText(getString(R.string.disconnect));
-                    connectionStateText.setText(getResources().getString(R.string.connected));
-                    connectionStateText.setTextColor(getResources().getColor(R.color.connected));
-                    executeButton.setEnabled(true);
-                } else {
+                    display.disconnect();
                     connectionButton.setText(getString(R.string.connect));
                     connectionStateText.setText(getResources().getString(R.string.disconnected));
                     connectionStateText.setTextColor(getResources().getColor(R.color.disconnected));
                     executeButton.setEnabled(false);
+                } else {
+                    display.connect();
+                    connectionButton.setText(getString(R.string.disconnect));
+                    connectionStateText.setText(getResources().getString(R.string.connected));
+                    connectionStateText.setTextColor(getResources().getColor(R.color.connected));
+                    executeButton.setEnabled(true);
                 }
             }
         });
@@ -117,7 +118,7 @@ public class MainActivity extends AppCompatActivity {
         pulseButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                display.pulse(getDiodeFromRadio());
+                display.pulse(getDiodeFromRadio(), Integer.parseInt(editText.getText().toString()));
             }
         });
 

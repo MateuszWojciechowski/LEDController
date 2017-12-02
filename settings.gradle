@@ -1,1 +1,1 @@
-include ':app', ':peripheraldisplaylibrary-debug'
+include ':app', ':peripheraldisplaylibrary'
