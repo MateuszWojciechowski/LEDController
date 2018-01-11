@@ -31,6 +31,8 @@ import android.widget.TextView;
 import android.widget.Toast;
 import android.widget.ToggleButton;
 
+import com.mateuszwojciechowski.peripheraldisplaylibrary.Display;
+
 import java.util.List;
 import java.util.UUID;
 
@@ -45,16 +47,6 @@ public class MainActivity extends AppCompatActivity {
     private NumberPicker numberPicker;
     private RadioGroup colorsRadioGroup, chooseDiode;
     private ProgressBar progressBar;
-    private BluetoothManager mBluetoothManager;
-    private BluetoothAdapter mBluetoothAdapter;
-    private BluetoothGatt mBluetoothGatt;
-    private BluetoothDevice mBluetoothDevice;
-    private BluetoothGattService mBluetoothGattService;
-    private BluetoothGattCharacteristic mBluetoothGattCharacteristic;
-    private Context mContext;
-    private static final String DEVICE_ADDRESS = "88:4A:EA:8B:8B:CD";
-    private static final UUID SERVICE_UUID = UUID.fromString("0000ffe0-0000-1000-8000-00805f9b34fb");
-    private static final UUID CHARACTERISTIC_UUID = UUID.fromString("0000ffe1-0000-1000-8000-00805f9b34fb");
     private static final int REQUEST_ENABLE_BT = 1;
     private boolean CONNECTED = false;
     private class ProgressTask extends AsyncTask<Integer, Integer, Boolean> {
@@ -93,13 +85,8 @@ public class MainActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
-        mContext = this.getApplicationContext();
 
-        mBluetoothManager = (BluetoothManager) getSystemService(Context.BLUETOOTH_SERVICE);
-        mBluetoothAdapter = mBluetoothManager.getAdapter();
-        mBluetoothDevice = mBluetoothAdapter.getRemoteDevice(DEVICE_ADDRESS);
-
-
+        final Display display = new Display(getApplicationContext(), (BluetoothManager)getSystemService(BLUETOOTH_SERVICE));
         //Inicjalizowanie elementów widoku
         connectionStateText = (TextView) findViewById(R.id.connectionState);
 
@@ -107,14 +94,18 @@ public class MainActivity extends AppCompatActivity {
         connectionButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                if (CONNECTED == false) {
-                    if (mBluetoothGatt == null) {
-                        mBluetoothGatt = mBluetoothDevice.connectGatt(mContext, false, gattCallback);
-                    }
+                if(display.isConnected()) {
+                    display.disconnect();
+                    connectionButton.setText(getString(R.string.connect));
+                    connectionStateText.setText(getResources().getString(R.string.disconnected));
+                    connectionStateText.setTextColor(getResources().getColor(R.color.disconnected));
+                    executeButton.setEnabled(false);
                 } else {
-                    if (mBluetoothGatt != null) {
-                        mBluetoothGatt.disconnect();
-                    }
+                    display.connect();
+                    connectionButton.setText(getString(R.string.disconnect));
+                    connectionStateText.setText(getResources().getString(R.string.connected));
+                    connectionStateText.setTextColor(getResources().getColor(R.color.connected));
+                    executeButton.setEnabled(true);
                 }
             }
         });
@@ -127,7 +118,7 @@ public class MainActivity extends AppCompatActivity {
         pulseButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                pulseEffect();
+                display.pulse(getDiodeFromRadio(), Integer.parseInt(editText.getText().toString()));
             }
         });
 
@@ -144,8 +135,7 @@ public class MainActivity extends AppCompatActivity {
         executeButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                int time = fadeEffect();
-                new ProgressTask().execute(time);
+                display.fade(getDiodeFromRadio(), getColorFromRadio(), numberPicker.getValue() * 1000);
             }
         });
     }
@@ -154,10 +144,10 @@ public class MainActivity extends AppCompatActivity {
     protected void onResume() {
         super.onResume();
         //wymuszenie włączenia Bluetooth
-        if (mBluetoothAdapter == null || !mBluetoothAdapter.isEnabled()) {
-            Intent enableBT = new Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE);
-            startActivityForResult(enableBT, REQUEST_ENABLE_BT);
-        }
+//        if (mBluetoothAdapter == null || !mBluetoothAdapter.isEnabled()) {
+//            Intent enableBT = new Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE);
+//            startActivityForResult(enableBT, REQUEST_ENABLE_BT);
+//        }
     }
 
     @Override
@@ -172,115 +162,30 @@ public class MainActivity extends AppCompatActivity {
         super.onActivityResult(requestCode, resultCode, data);
     }
 
-    //BT callback
-    private BluetoothGattCallback gattCallback = new BluetoothGattCallback() {
-        //funkcja wywołuje się jak urządzenie się połączy/rozłączy
-        @Override
-        public void onConnectionStateChange(BluetoothGatt gatt, int status, int newState) {
-            switch (newState) {
-                case BluetoothProfile.STATE_CONNECTED:
-                    CONNECTED = true;
-                    mBluetoothGatt.discoverServices();
-                    runOnUiThread(new Runnable() {
-                        @Override
-                        public void run() {
-                            connectionButton.setText(getString(R.string.disconnect));
-                            connectionStateText.setText(getResources().getString(R.string.connected));
-                            connectionStateText.setTextColor(getResources().getColor(R.color.connected));
-                            executeButton.setEnabled(true);
-                        }
-                    });
-                    break;
-                case BluetoothProfile.STATE_DISCONNECTED:
-                    CONNECTED = false;
-                    mBluetoothGatt.close();
-                    mBluetoothGatt = null;
-                    runOnUiThread(new Runnable() {
-                        @Override
-                        public void run() {
-                            connectionButton.setText(getString(R.string.connect));
-                            connectionStateText.setText(getResources().getString(R.string.disconnected));
-                            connectionStateText.setTextColor(getResources().getColor(R.color.disconnected));
-                            executeButton.setEnabled(false);
-                        }
-                    });
-                    break;
-                default:
-
-            }
-        }
-
-        //wywołuje się gdy smartfon odkrywa usługi BT Gatt
-        @Override
-        public void onServicesDiscovered(BluetoothGatt gatt, int status) {
-            mBluetoothGattService = gatt.getService(SERVICE_UUID);
-            mBluetoothGattCharacteristic = mBluetoothGattService.getCharacteristic(CHARACTERISTIC_UUID);
-        }
-
-        @Override
-        public void onCharacteristicRead(BluetoothGatt gatt, BluetoothGattCharacteristic characteristic, int status) {
-
-        }
-
-        @Override
-        public void onCharacteristicWrite(BluetoothGatt gatt, BluetoothGattCharacteristic characteristic, int status) {
-
-        }
-
-        @Override
-        public void onCharacteristicChanged(BluetoothGatt gatt, BluetoothGattCharacteristic characteristic) {
-
-        }
-    };
-
-    //wysyła komendę zmiany koloru na podstawie aktualnych ustawień
-    private int fadeEffect() {
-        String command = "";
-        command += getDiodeFromRadio();
-        command += getColorFromRadio(colorsRadioGroup);
-        command += ":" + (numberPicker.getValue() * 1000) + ";";
-
-        mBluetoothGattCharacteristic.setValue(command);
-        mBluetoothGatt.writeCharacteristic(mBluetoothGattCharacteristic);
-
-        return (numberPicker.getValue() * 1000);
-    }
-
-    //wysyła komendę pulsowania aktualnie wybranej diody
-    private void pulseEffect() {
-        String command = "";
-        command += getDiodeFromRadio();
-        command += ":pulse:";
-        command += editText.getText() + ";";
-
-        mBluetoothGattCharacteristic.setValue(command);
-        mBluetoothGatt.writeCharacteristic(mBluetoothGattCharacteristic);
-    }
-
     //zwraca kolor diody na podstawie wybranego przycisku
-    private String getColorFromRadio(RadioGroup group) {
-        RadioButton radio = (RadioButton) findViewById(group.getCheckedRadioButtonId());
+    private String getColorFromRadio() {
+        RadioButton radio = (RadioButton) findViewById(colorsRadioGroup.getCheckedRadioButtonId());
         String color = radio.getText().toString();
         if (color == getResources().getString(R.string.red)) {
-            return ":R";
+            return Display.RED;
         } else if (color == getResources().getString(R.string.green)) {
-            return ":G";
+            return Display.GREEN;
         } else if (color == getResources().getString(R.string.blue)) {
-            return ":B";
+            return Display.BLUE;
         } else if (color == getResources().getString(R.string.yellow)) {
-            return ":Y";
+            return Display.YELLOW;
         } else if (color == getResources().getString(R.string.orange)) {
-            return ":O";
+            return Display.ORANGE;
         } else if (color == getResources().getString(R.string.purple)) {
-            return ":P";
+            return Display.PURPLE;
         } else if (color == getResources().getString(R.string.ltblue)) {
-            return ":L";
+            return Display.LIGHT_BLUE;
         } else if (color == getResources().getString(R.string.white)) {
-            return ":W";
+            return Display.WHITE;
         } else if (color == getResources().getString(R.string.off)) {
-            return ":OFF";
+            return Display.OFF;
         } else {
-            return ":ERROR";
+            return "ERROR";
         }
     }
 
@@ -296,6 +201,10 @@ public class MainActivity extends AppCompatActivity {
             return 1;
         } else if (id.equals("3")) {
             return 2;
+        } else if (id.equals("4")) {
+            return 3;
+        } else if (id.equals("5")) {
+            return 4;
         } else { return -1; }
     }
 }
